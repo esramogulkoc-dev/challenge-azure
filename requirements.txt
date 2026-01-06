@@ -2,3 +2,4 @@ requests
 azure-functions
 pandas
 numpy
+pymssql
