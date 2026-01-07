@@ -47,7 +47,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
 
             cursor.execute(
                 """
-                INSERT INTO departures_table 
+                INSERT INTO departures_connections 
                 (from_station, to_station, vehicle, departure_time, arrival_time)
                 VALUES (%s, %s, %s, %s, %s)
                 """,
