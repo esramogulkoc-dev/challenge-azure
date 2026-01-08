@@ -2,6 +2,11 @@
   "IsEncrypted": false,
   "Values": {
     "FUNCTIONS_WORKER_RUNTIME": "python",
-    "AzureWebJobsStorage": "UseDevelopmentStorage=true"
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+
+    "SQL_SERVER": "sql-data-train-2026-1.database.windows.net",
+    "SQL_DATABASE": "irail-db",
+    "SQL_USERNAME": "esra-admin-sql",
+    "SQL_PASSWORD": "becode2026*"
   }
 }

@@ -2,19 +2,16 @@ import logging
 import requests
 import pymssql
 import azure.functions as func
+import os
 
-# ----------------------------
-# SQL connection (Azure SQL)
-# ----------------------------
-server = "sql-data-train-2026-1.database.windows.net"
-database = "irail-db"
-username = "esra-admin-sql"
-password = "becode2026*"
+server = os.environ.get("SQL_SERVER")
+database = os.environ.get("SQL_DATABASE")
+username = os.environ.get("SQL_USERNAME")
+password = os.environ.get("SQL_PASSWORD")
 
 def main(req: func.HttpRequest) -> func.HttpResponse:
     logging.info('Python HTTP trigger function processed a request.')
 
-    # Query parameters: from_station ve to_station
     from_station = req.params.get('from_station') or "Leuven"
     to_station = req.params.get('to_station') or "Gent-Sint-Pieters"
 
@@ -24,13 +21,11 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
     )
 
     try:
-        # ---- iRail API call ----
         response = requests.get(url)
         response.raise_for_status()
         data = response.json()
         connections = data.get('connection', [])
 
-        # ---- SQL INSERT ----
         conn = pymssql.connect(
             server=server,
             user=username,
@@ -40,7 +35,6 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         cursor = conn.cursor()
 
         for conn_item in connections:
-            # Train details (dict içinden time alıyoruz)
             departure_time = conn_item.get('departure', {}).get('time')
             arrival_time = conn_item.get('arrival', {}).get('time')
             vehicle = conn_item.get('vehicle', 'Unknown')
@@ -58,7 +52,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         conn.close()
 
         return func.HttpResponse(
-            f"Fetched {len(connections)} connections from {from_station} to {to_station} and inserted into SQL."
+            f"Fetched {len(connections)} connections from {from_station} to {to_station}."
         )
 
     except Exception as e:
