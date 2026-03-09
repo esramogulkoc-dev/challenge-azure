@@ -14,6 +14,7 @@ The primary focus of this project is to build a **serverless cloud architecture*
 3. **Load:** Processed data is inserted into **Azure SQL Database** using the `pymssql` library.
 4. **Visualize:** **Power BI** connects via **Import** to provide a real-time station "Digital Board" and route analysis.
 
+![alt text](images/workflow.png)
 
 ---
 
@@ -126,6 +127,7 @@ The Python script inside the Azure Functions follows a strict **ETL (Extract, Tr
 | **Cloud Security** | Database credentials and connection strings are managed via Azure Environment Variables, never hardcoded. |
 | **Power BI Visualization** | Data is imported from Azure SQL into Power BI for station board and route analysis dashboards. |
 
+![alt text](image.png)
 ---
 
 ## 👤 Author
