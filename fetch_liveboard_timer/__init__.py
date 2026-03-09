@@ -2,66 +2,47 @@ import logging
 import requests
 import pymssql
 import os
+from datetime import datetime
 import azure.functions as func
-import time
-
-server = os.environ["SQL_SERVER"]
-database = os.environ["SQL_DATABASE"]
-username = os.environ["SQL_USERNAME"]
-password = os.environ["SQL_PASSWORD"]
-
-STATIONS = [
-    "Leuven",
-    "Gent-Sint-Pieters",
-    "Brussels-Central",
-    "Antwerp"
-]
 
 def main(mytimer: func.TimerRequest) -> None:
-    logging.info("Live connections timer started")
+    # Azure Configuration'dan bilgileri al
+    server = os.environ.get("SQL_SERVER")
+    database = os.environ.get("SQL_DATABASE")
+    username = os.environ.get("SQL_USERNAME")
+    password = os.environ.get("SQL_PASSWORD")
 
-    now = int(time.time())
-    two_hours_later = now + 2 * 3600
+    stations = ["Brussels-Central", "Leuven", "Gent-Sint-Pieters", "Antwerpen-Centraal"]
+    conn = None
 
-    conn = pymssql.connect(server, username, password, database)
-    cursor = conn.cursor()
+    try:
+        conn = pymssql.connect(server=server, user=username, password=password, database=database)
+        cursor = conn.cursor()
 
-    # LIVE tabloyu temizle
-    cursor.execute("TRUNCATE TABLE departures_connections_live")
-
-    for from_station in STATIONS:
-        for to_station in STATIONS:
-            if from_station == to_station:
-                continue
-
-            url = (
-                f"https://api.irail.be/connections/"
-                f"?from={from_station}&to={to_station}&format=json&alerts=false"
-            )
-
-            response = requests.get(url)
+        for station in stations:
+            url = f"https://api.irail.be/liveboard/?station={station}&format=json&arrdep=departure&lang=en"
+            response = requests.get(url, timeout=10)
             data = response.json()
+            departures = data.get('departures', {}).get('departure', [])
 
-            for c in data.get("connection", []):
-                dep = int(c["departure"]["time"])
-                arr = int(c["arrival"]["time"])
+            for train in departures:
+                vehicle = train.get('vehicle')
+       
+                dep_time = datetime.fromtimestamp(int(train.get('time')))
+                delay = int(train.get('delay', 0)) // 60
+                canceled = int(train.get('canceled', 0))
 
-                if now <= dep <= two_hours_later:
-                    cursor.execute(
-                        """
-                        INSERT INTO departures_connections_live
-                        (from_station, to_station, vehicle, departure_time, arrival_time)
-                        VALUES (%s, %s, %s, %s, %s)
-                        """,
-                        (
-                            from_station,
-                            to_station,
-                            c.get("vehicle", "Unknown"),
-                            dep,
-                            arr
-                        )
-                    )
-
-    conn.commit()
-    conn.close()
-    logging.info("Live connections table refreshed")
+                # Mükerrer kaydı önleyen akıllı SQL sorgusu
+                cursor.execute("""
+                    IF NOT EXISTS (SELECT 1 FROM departures_liveboard WHERE vehicle=%s AND departure_time=%s)
+                    INSERT INTO departures_liveboard (station, vehicle, departure_time, delay_minutes, is_canceled)
+                    VALUES (%s, %s, %s, %s, %s)
+                """, (vehicle, dep_time, station, vehicle, dep_time, delay, canceled))
+        
+        conn.commit()
+        logging.info("Liveboard güncellemesi başarıyla tamamlandı (train-info-db).")
+    except Exception as e:
+        logging.error(f"Hata oluştu: {str(e)}")
+    finally:
+        if conn:
+            conn.close()

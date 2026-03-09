@@ -1,116 +1,129 @@
-# Challenge Azure – Belgium Train Data Project
+# 🚆 Belgian Rail: Azure Cloud Data Pipeline
+**An End-to-End Serverless ETL Solution**
 
-## Project Overview
+This project demonstrates a fully automated data pipeline built with **Microsoft Azure** and the **iRail API**. The system fetches, normalizes, and stores live Belgian train data into an **Azure SQL Database**, which is then visualized through a **Power BI dashboard**.
 
-This project demonstrates a real-world data pipeline using **Microsoft Azure** and the **iRail API** to fetch live train data in Belgium. The pipeline normalizes the data and stores it in an **Azure SQL Database**, which is then visualized in a **Power BI dashboard**.
-
-The project is part of a learning challenge, and the focus is on building a **cloud-native, serverless data pipeline** with Python Azure Functions.
+The primary focus of this project is to build a **serverless cloud architecture** to handle automated data ingestion and transformation for real-time analytics.
 
 ---
 
-## Repository Structure (`challenge-azure`)
+## 🏗️ System Architecture & Workflow
 
-```
+
+
+1.  **Extract:** Azure Functions (Timer Trigger) fetch raw JSON data from the iRail API every 10 minutes.
+2.  **Transform:** A Python script processes the JSON, converts Unix timestamps to SQL-compatible DateTime, and handles data cleaning.
+3.  **Load:** Processed data is inserted into **Azure SQL Database** using the `pyodbc` library.
+4.  **Visualize:** **Power BI** connects via **DirectQuery** to provide a real-time station "Digital Board" and route analysis.
+
+---
+
+## 📂 Repository Structure
+
+```text
 challenge-azure/
 │
-├─ fetch_connection1/ # HTTP-triggered function to fetch train connections
-│ ├─ init.py
-│ └─ function.json
+├── fetch_connection1/          # HTTP-triggered: Manual connection fetch
+│   ├── __init__.py
+│   └── function.json
 │
-├─ fetch_connections_timer_v2/ # Timer-triggered function for automatic connection fetch
-│ ├─ init.py
-│ └─ function.json
+├── fetch_connections_timer_v2/ # Timer-triggered: Automatic connection fetch
+│   ├── __init__.py
+│   └── function.json
 │
-├─ fetch_liveboard/ # HTTP-triggered function to fetch liveboard departures
-│ ├─ init.py
-│ └─ function.json
+├── fetch_liveboard/            # HTTP-triggered: Manual liveboard fetch
+│   ├── __init__.py
+│   └── function.json
 │
-├─ fetch_liveboard_timer/ # Timer-triggered function for automatic liveboard fetch
-│ ├─ init.py
-│ └─ function.json
+├── fetch_liveboard_timer/      # Timer-triggered: Automatic liveboard fetch
+│   ├── __init__.py
+│   └── function.json
 │
-├─ host.json # Azure Functions host configuration
-└─ local.settings.json # Local environment variables (ignored by git)
-
-│
-├─ images/ HTTP function test run.png
-           SQL data table.png
-           Power BI dashboard.png
-           
-## Must-Have Features
-
-* **Azure Function App** (Python) deployed via **VS Code** to Azure
-* **Azure SQL Database** to store normalized train data
-* Functions can be triggered **manually via HTTP** or **automatically via Timer Trigger**
-* Secrets (SQL credentials) are stored in **Azure App Settings**; `local.settings.json` is ignored in GitHub
+├── host.json                   # Azure Functions host configuration
+├── local.settings.json         # Local env variables (Ignored by git)
+└── images/                     # Screenshots and Deliverables
+    ├── HTTP_function_test.png
+    ├── SQL_data_table.png
+    └── Power_BI_dashboard.png
 
 ---
 
-## Nice-to-Have Features
-
-* **Automated fetching** using Timer Trigger every hour
-* **Power BI dashboard** connected to Azure SQL Database:
-## Power BI Dashboard
-
-The Power BI dashboard is included in this repository as a `.pbix` file and can be opened locally in Power BI Desktop; it cannot be viewed directly on GitHub.
-
-You can download the Power BI dashboard here:  
-challenge-azure-powerBI.pbix
-
-Recommended visuals:
-
-- Line chart: train departures over time
-- Column chart: trains per station
-- Table: detailed train info
-- Slicers: dropdown filters for stations and date
-
-
-  * Line chart showing train departures over time
-  * Column chart showing train distribution per station
-  * Table with detailed train information (`from_station`, `to_station`, `vehicle`, departure & arrival times)
-  * Slicers to filter by station and date
-* SQL timestamps converted from Unix format to DateTime for visualization
+📅 Project Timeline (4 Days)
+Day,Task,Milestone
+Day 1 API Exploration & Local Dev,Analyzed iRail API endpoints. Developed Python logic for Unix-to-DateTime conversion and JSON parsing.
+Day 2 Azure SQL Setup,Provisioned Azure SQL Server and Database. Configured Firewall rules and established relational schemas.
+Day 3 Cloud Deployment,Developed and deployed Functions via VS Code. Configured Azure App Settings for secure Connection String management.
+Day 4 Data Visualization,Integrated Azure SQL with Power BI. Designed a digital board with real-time station filters (Slicers) for From-To routes.
 
 ---
 
-## Setup Instructions
+💾 Database Schema (SQL)
+Run these scripts in your Azure SQL Query Editor to set up the environment:
 
-1. Clone this repository:
+Table 1: departures_liveboard (Station Status)
 
-```bash
-git clone https://github.com/esramogulkoc-dev/challenge-azure.git
-cd challenge-azure
-```
+CREATE TABLE departures_liveboard (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    time DATETIME,             
+    station NVARCHAR(100),     
+    vehicle NVARCHAR(50),      
+    platform NVARCHAR(10),     
+    created_at DATETIME DEFAULT GETDATE()
+);
 
-> **Note:** `local.settings.json` is ignored in GitHub for security.
+---
 
-3. Deploy to Azure using VS Code:
+Table 2: departures_connections_4stations (Route Tracking)
+CREATE TABLE departures_connections_4stations (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    departure_station NVARCHAR(100), 
+    arrival_station NVARCHAR(100),   
+    departure_time DATETIME,
+    arrival_time DATETIME,
+    vehicle NVARCHAR(50),
+    created_at DATETIME DEFAULT GETDATE()
+);
 
-```bash
-func azure functionapp publish train-info-db
-```
+---
 
-4. Test manually via the HTTP endpoints or wait for the Timer Trigger to fetch automatically.
+🐍 ETL Logic (Python Step-by-Step)
+The Python script inside the Azure Functions follows a strict ETL (Extract, Transform, Load) pattern:
 
+Ingestion (Extract):
 
-## Screenshots / Deliverables
-challenge-azure/
-│
-├─ images/
+Uses the requests library to pull live JSON data from iRail API.
 
-* Screenshot of **HTTP function test run** from Azure Portal
-  HTTP function test run.png
+Fetches data for multiple hubs including Brussels-Central, Antwerp, and Gent.
 
-* Screenshot of **SQL data table**
-  SQL data table.png
+Transformation:
 
-* Screenshot of **Power BI dashboard**
-  Power BI dashboard.png
+Iterates through the JSON departures list.
 
-## License
+Uses datetime.fromtimestamp() to convert Unix epoch time to SQL-friendly format (YYYY-MM-DD HH:MM:SS).
 
-This project is for **learning purposes** as part of the Azure Challenge at BeCode.
+Normalizes station names and vehicle IDs to ensure clean data entry.
 
+Loading:
 
+Opens a connection using pyodbc.
 
+Executes parameterized INSERT queries to ensure data security and prevent SQL injection.
 
+Commits changes to the Azure SQL Database 24/7.
+
+---
+
+⚡ Key Features
+Serverless Cost Optimization: Uses Azure Functions Consumption Plan (Pay-as-you-go), charging only when the code runs.
+
+Dual Trigger System: Supports both manual testing via HTTP requests and automated production scheduling via Timer Trigger.
+
+Cloud Security: Database credentials and connection strings are managed via Azure Environment Variables, never hardcoded in the script.
+
+DirectQuery Visualization: The Power BI dashboard updates automatically as soon as the SQL tables receive new data.
+
+---
+
+Author: Esra Mogulkoc
+
+License: This project is for educational purposes as part of the BeCode Azure Challenge.

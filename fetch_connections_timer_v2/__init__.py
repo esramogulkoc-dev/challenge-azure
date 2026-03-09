@@ -1,56 +1,55 @@
 import logging
 import requests
 import pymssql
-import azure.functions as func
 import os
-
-server = os.environ.get("SQL_SERVER")
-database = os.environ.get("SQL_DATABASE")
-username = os.environ.get("SQL_USERNAME")
-password = os.environ.get("SQL_PASSWORD")
-
-ALL_STATIONS = ["Leuven", "Gent-Sint-Pieters", "Brussels-Central", "Antwerp"]
+from datetime import datetime
+import azure.functions as func
 
 def main(mytimer: func.TimerRequest) -> None:
-    logging.info('fetch_connection_timer_v2 ran.')
+    server = os.environ.get("SQL_SERVER")
+    database = os.environ.get("SQL_DATABASE")
+    username = os.environ.get("SQL_USERNAME")
+    password = os.environ.get("SQL_PASSWORD")
 
-    stations_to_fetch = [(f, t) for f in ALL_STATIONS for t in ALL_STATIONS if f != t]
+    # Analiz etmek istediğimiz ana istasyonlar
+    stations = ["Leuven", "Brussels-Central", "Gent-Sint-Pieters", "Antwerpen-Centraal"]
+    # Tüm kombinasyonları oluştur (Nereden-Nereye)
+    routes = [(f, t) for f in stations for t in stations if f != t]
+    
+    conn = None
 
-    total_inserted = 0
-    for from_station, to_station in stations_to_fetch:
-        url = f"https://api.irail.be/connections/?from={from_station}&to={to_station}&format=json&alerts=false"
-        try:
-            response = requests.get(url)
-            response.raise_for_status()
+    try:
+        conn = pymssql.connect(server=server, user=username, password=password, database=database)
+        cursor = conn.cursor()
+
+        for fr, to in routes:
+            url = f"https://api.irail.be/connections/?from={fr}&to={to}&format=json"
+            response = requests.get(url, timeout=10)
             data = response.json()
             connections = data.get('connection', [])
 
-            conn = pymssql.connect(server=server, user=username, password=password, database=database)
-            cursor = conn.cursor()
+            for c in connections:
+                # Zaman Dönüşümleri
+                dep_dt = datetime.fromtimestamp(int(c['departure']['time']))
+                arr_dt = datetime.fromtimestamp(int(c['arrival']['time']))
+                
+                # Süre Hesaplama (Saniye -> Dakika)
+                duration = int(c.get('duration', 0)) // 60
+                
+                occupancy = c.get('occupancy', {}).get('name', 'unknown')
+                vehicle = c['departure'].get('vehicle')
 
-            for conn_item in connections:
-                departure_time = conn_item.get('departure', {}).get('time')
-                arrival_time = conn_item.get('arrival', {}).get('time')
-                vehicle = conn_item.get('vehicle', 'Unknown')
-
+                # Aynı trenin aynı saatteki kaydı varsa tekrar ekleme
                 cursor.execute("""
-                    IF NOT EXISTS (
-                        SELECT 1 FROM departures_connections_4stations 
-                        WHERE from_station=%s AND to_station=%s AND vehicle=%s AND departure_time=%s
-                    )
-                    INSERT INTO departures_connections_4stations 
-                    (from_station, to_station, vehicle, departure_time, arrival_time)
-                    VALUES (%s, %s, %s, %s, %s)
-                """, (
-                    from_station, to_station, vehicle, departure_time,
-                    from_station, to_station, vehicle, departure_time, arrival_time
-                ))
+                    IF NOT EXISTS (SELECT 1 FROM departures_connections_4stations WHERE vehicle=%s AND departure_time=%s)
+                    INSERT INTO departures_connections_4stations (from_station, to_station, vehicle, departure_time, arrival_time, duration_minutes, occupancy)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """, (vehicle, dep_dt, fr, to, vehicle, dep_dt, arr_dt, duration, occupancy))
 
-            conn.commit()
+        conn.commit()
+        logging.info("Connections güncellemesi başarıyla tamamlandı (train-info-db).")
+    except Exception as e:
+        logging.error(f"Connections Hatası: {str(e)}")
+    finally:
+        if conn:
             conn.close()
-            total_inserted += len(connections)
-
-        except Exception as e:
-            logging.error(f"Error fetching connections for {from_station} → {to_station}: {str(e)}")
-
-    logging.info(f"Total inserted connections this run: {total_inserted}")
