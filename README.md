@@ -9,12 +9,27 @@ The primary focus of this project is to build a **serverless cloud architecture*
 
 ## 🏗️ System Architecture & Workflow
 
+1. **Extract:** Azure Functions (Timer Trigger) fetch raw JSON data from the iRail API every 10 minutes.
+2. **Transform:** A Python script processes the JSON, converts Unix timestamps to SQL-compatible DateTime, and handles data cleaning.
+3. **Load:** Processed data is inserted into **Azure SQL Database** using the `pymssql` library.
+4. **Visualize:** **Power BI** connects via **Import** to provide a real-time station "Digital Board" and route analysis.
 
+```mermaid
+flowchart LR
+    A["🌐 iRail API\n─────────────\nTimer: 10 min\n4 Stations\n12 Routes"]
+    B["⚡ Azure Function\n─────────────\nUnix → DateTime\nsec → minutes\nOccupancy parse"]
+    C["🗄️ Azure SQL DB\n─────────────\ndepartures_liveboard\nconnections_4stations\nIF NOT EXISTS"]
+    D["📊 Power BI\n─────────────\nImport Mode\nDigital Board\nRoute Analysis"]
 
-1.  **Extract:** Azure Functions (Timer Trigger) fetch raw JSON data from the iRail API every 10 minutes.
-2.  **Transform:** A Python script processes the JSON, converts Unix timestamps to SQL-compatible DateTime, and handles data cleaning.
-3.  **Load:** Processed data is inserted into **Azure SQL Database** using the `pyodbc` library.
-4.  **Visualize:** **Power BI** connects via **DirectQuery** to provide a real-time station "Digital Board" and route analysis.
+    A -->|"JSON"| B
+    B -->|"pymssql"| C
+    C -->|"Import"| D
+
+    style A fill:#0d1b35,stroke:#3b8ef0,color:#7cb8ff
+    style B fill:#1a0d35,stroke:#a855f7,color:#d09aff
+    style C fill:#0d2b1a,stroke:#22c55e,color:#6ee7a0
+    style D fill:#2b1a0d,stroke:#f97316,color:#fdb877
+```
 
 ---
 
@@ -45,85 +60,92 @@ challenge-azure/
     ├── HTTP_function_test.png
     ├── SQL_data_table.png
     └── Power_BI_dashboard.png
+```
 
 ---
 
-📅 Project Timeline (4 Days)
-Day,Task,Milestone
-Day 1 API Exploration & Local Dev,Analyzed iRail API endpoints. Developed Python logic for Unix-to-DateTime conversion and JSON parsing.
-Day 2 Azure SQL Setup,Provisioned Azure SQL Server and Database. Configured Firewall rules and established relational schemas.
-Day 3 Cloud Deployment,Developed and deployed Functions via VS Code. Configured Azure App Settings for secure Connection String management.
-Day 4 Data Visualization,Integrated Azure SQL with Power BI. Designed a digital board with real-time station filters (Slicers) for From-To routes.
+## 📅 Project Timeline (4 Days)
+
+| Day | Task | Milestone |
+|-----|------|-----------|
+| **Day 1** | API Exploration & Local Dev | Analyzed iRail API endpoints. Developed Python logic for Unix-to-DateTime conversion and JSON parsing. |
+| **Day 2** | Azure SQL Setup | Provisioned Azure SQL Server and Database. Configured Firewall rules and established relational schemas. |
+| **Day 3** | Cloud Deployment | Developed and deployed Functions via VS Code. Configured Azure App Settings for secure Connection String management. |
+| **Day 4** | Data Visualization | Integrated Azure SQL with Power BI. Designed a digital board with real-time station filters (Slicers) for From-To routes. |
 
 ---
 
-💾 Database Schema (SQL)
+## 💾 Database Schema (SQL)
+
 Run these scripts in your Azure SQL Query Editor to set up the environment:
 
-Table 1: departures_liveboard (Station Status)
+### Table 1: `departures_liveboard` (Station Status)
 
+```sql
 CREATE TABLE departures_liveboard (
     id INT IDENTITY(1,1) PRIMARY KEY,
-    time DATETIME,             
-    station NVARCHAR(100),     
-    vehicle NVARCHAR(50),      
-    platform NVARCHAR(10),     
+    station NVARCHAR(100),
+    vehicle NVARCHAR(50),
+    departure_time DATETIME,
+    delay_minutes INT,
+    is_canceled INT,
     created_at DATETIME DEFAULT GETDATE()
 );
+```
 
----
+### Table 2: `departures_connections_4stations` (Route Tracking)
 
-Table 2: departures_connections_4stations (Route Tracking)
+```sql
 CREATE TABLE departures_connections_4stations (
     id INT IDENTITY(1,1) PRIMARY KEY,
-    departure_station NVARCHAR(100), 
-    arrival_station NVARCHAR(100),   
+    from_station NVARCHAR(100),
+    to_station NVARCHAR(100),
+    vehicle NVARCHAR(50),
     departure_time DATETIME,
     arrival_time DATETIME,
-    vehicle NVARCHAR(50),
+    duration_minutes INT,
+    occupancy NVARCHAR(50),
     created_at DATETIME DEFAULT GETDATE()
 );
+```
 
 ---
 
-🐍 ETL Logic (Python Step-by-Step)
-The Python script inside the Azure Functions follows a strict ETL (Extract, Transform, Load) pattern:
+## 🐍 ETL Logic (Python Step-by-Step)
 
-Ingestion (Extract):
+The Python script inside the Azure Functions follows a strict **ETL (Extract, Transform, Load)** pattern:
 
-Uses the requests library to pull live JSON data from iRail API.
+### 📥 Ingestion (Extract)
+- Uses the `requests` library to pull live JSON data from the iRail API.
+- Fetches liveboard data for 4 stations: **Brussels-Central**, **Leuven**, **Gent-Sint-Pieters**, and **Antwerpen-Centraal**.
+- Fetches connection data for all route combinations between the same 4 stations (12 routes total).
 
-Fetches data for multiple hubs including Brussels-Central, Antwerp, and Gent.
+### 🔄 Transformation
+- Uses `datetime.fromtimestamp()` to convert Unix epoch time to SQL-friendly format (`YYYY-MM-DD HH:MM:SS`).
+- Converts `delay` and `duration` values from seconds to minutes (`// 60`).
+- Extracts `is_canceled` status and `occupancy` level from the API response.
 
-Transformation:
-
-Iterates through the JSON departures list.
-
-Uses datetime.fromtimestamp() to convert Unix epoch time to SQL-friendly format (YYYY-MM-DD HH:MM:SS).
-
-Normalizes station names and vehicle IDs to ensure clean data entry.
-
-Loading:
-
-Opens a connection using pyodbc.
-
-Executes parameterized INSERT queries to ensure data security and prevent SQL injection.
-
-Commits changes to the Azure SQL Database 24/7.
+### 📤 Loading
+- Opens a connection using `pymssql`.
+- Uses `IF NOT EXISTS` duplicate check before every insert — same vehicle at the same departure time is never inserted twice.
+- Executes **parameterized INSERT queries** to prevent SQL injection.
+- Commits all changes to the Azure SQL Database after each run.
 
 ---
 
-⚡ Key Features
-Serverless Cost Optimization: Uses Azure Functions Consumption Plan (Pay-as-you-go), charging only when the code runs.
+## ⚡ Key Features
 
-Dual Trigger System: Supports both manual testing via HTTP requests and automated production scheduling via Timer Trigger.
-
-Cloud Security: Database credentials and connection strings are managed via Azure Environment Variables, never hardcoded in the script.
-
-DirectQuery Visualization: The Power BI dashboard updates automatically as soon as the SQL tables receive new data.
+| Feature | Description |
+|---------|-------------|
+| **Serverless Cost Optimization** | Uses Azure Functions Consumption Plan (Pay-as-you-go), charging only when the code runs. |
+| **Dual Trigger System** | Supports both manual testing via HTTP requests and automated production scheduling via Timer Trigger. |
+| **Cloud Security** | Database credentials and connection strings are managed via Azure Environment Variables, never hardcoded. |
+| **Power BI Visualization** | Data is imported from Azure SQL into Power BI for station board and route analysis dashboards. |
 
 ---
 
-Author: Esra Mogulkoc
+## 👤 Author
 
-License: This project is for educational purposes as part of the BeCode Azure Challenge.
+**Esra Mogulkoc**
+
+> 📄 *This project is for educational purposes as part of the BeCode Azure Challenge.*
