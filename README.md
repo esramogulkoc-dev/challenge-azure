@@ -14,22 +14,6 @@ The primary focus of this project is to build a **serverless cloud architecture*
 3. **Load:** Processed data is inserted into **Azure SQL Database** using the `pymssql` library.
 4. **Visualize:** **Power BI** connects via **Import** to provide a real-time station "Digital Board" and route analysis.
 
-```mermaid
-flowchart LR
-    A["🌐 iRail API\n─────────────\nTimer: 10 min\n4 Stations\n12 Routes"]
-    B["⚡ Azure Function\n─────────────\nUnix → DateTime\nsec → minutes\nOccupancy parse"]
-    C["🗄️ Azure SQL DB\n─────────────\ndepartures_liveboard\nconnections_4stations\nIF NOT EXISTS"]
-    D["📊 Power BI\n─────────────\nImport Mode\nDigital Board\nRoute Analysis"]
-
-    A -->|"JSON"| B
-    B -->|"pymssql"| C
-    C -->|"Import"| D
-
-    style A fill:#0d1b35,stroke:#3b8ef0,color:#7cb8ff
-    style B fill:#1a0d35,stroke:#a855f7,color:#d09aff
-    style C fill:#0d2b1a,stroke:#22c55e,color:#6ee7a0
-    style D fill:#2b1a0d,stroke:#f97316,color:#fdb877
-```
 
 ---
 
