@@ -10,12 +10,7 @@ database = os.environ["SQL_DATABASE"]
 username = os.environ["SQL_USERNAME"]
 password = os.environ["SQL_PASSWORD"]
 
-STATIONS = [
-    "Leuven",
-    "Gent-Sint-Pieters",
-    "Brussels-Central",
-    "Antwerp"
-]
+STATIONS = ["Leuven", "Gent-Sint-Pieters", "Brussels-Central", "Antwerp"]
 
 def main(mytimer: func.TimerRequest) -> None:
     logging.info("Live connections timer started")
@@ -26,7 +21,7 @@ def main(mytimer: func.TimerRequest) -> None:
     conn = pymssql.connect(server, username, password, database)
     cursor = conn.cursor()
 
-    # LIVE tabloyu temizle
+    # 🔥 LIVE tabloyu temizle
     cursor.execute("TRUNCATE TABLE departures_connections_live")
 
     for from_station in STATIONS:
@@ -46,6 +41,7 @@ def main(mytimer: func.TimerRequest) -> None:
                 dep = int(c["departure"]["time"])
                 arr = int(c["arrival"]["time"])
 
+                # ⏱ SADECE YAKIN ZAMAN
                 if now <= dep <= two_hours_later:
                     cursor.execute(
                         """
